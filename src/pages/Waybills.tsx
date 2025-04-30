@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const Waybills = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,6 +32,9 @@ const Waybills = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedCountry, setSelectedCountry] = useState<string>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedRows, setSelectedRows] = useState<string[]>([]);
 
   // 사용 가능한 모든 국가 목록 추출
   const uniqueCountries = Array.from(
@@ -56,7 +60,11 @@ const Waybills = () => {
         selectedCountry === 'all' || 
         waybill.recipientInfo.country === selectedCountry;
       
-      return matchesSearch && matchesStatus && matchesCountry;
+      const waybillDate = new Date(waybill.createdAt);
+      const matchesStart = !startDate || waybillDate >= new Date(startDate);
+      const matchesEnd = !endDate || waybillDate <= new Date(endDate);
+      
+      return matchesSearch && matchesStatus && matchesCountry && matchesStart && matchesEnd;
     })
     .sort((a, b) => {
       // 날짜 필드에 대한 정렬
@@ -89,6 +97,18 @@ const Waybills = () => {
 
       return 0;
     });
+
+  const isAllSelected = filteredWaybills.length > 0 && selectedRows.length === filteredWaybills.length;
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedRows([]);
+    } else {
+      setSelectedRows(filteredWaybills.map(w => w.id));
+    }
+  };
+  const handleSelectRow = (id: string) => {
+    setSelectedRows(prev => prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]);
+  };
 
   const handleViewWaybill = (waybill: Waybill) => {
     setSelectedWaybill(waybill);
@@ -137,6 +157,8 @@ const Waybills = () => {
     setSelectedCountry('all');
     setSortField('createdAt');
     setSortDirection('desc');
+    setStartDate('');
+    setEndDate('');
   };
 
   return (
@@ -187,6 +209,20 @@ const Waybills = () => {
                   </SelectContent>
                 </Select>
               </div>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                className="w-[160px]"
+                placeholder="시작일"
+              />
+              <Input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                className="w-[160px]"
+                placeholder="종료일"
+              />
               <Button variant="outline" onClick={resetFilters}>
                 필터 초기화
               </Button>
@@ -196,6 +232,24 @@ const Waybills = () => {
             <div className="text-sm text-muted-foreground">
               총 {filteredWaybills.length}건의 송장 ({mockWaybills.length}건 중)
             </div>
+            <div className="flex gap-2">
+              <Button
+                variant="default"
+                className="bg-primary text-white"
+                disabled={selectedRows.length === 0}
+                onClick={() => {/* 선택된 송장 인쇄 로직 */}}
+              >
+                선택인쇄
+              </Button>
+              <Button
+                variant="secondary"
+                className="bg-blue-100 text-blue-800 border-blue-200"
+                disabled={selectedRows.length === 0}
+                onClick={() => {/* 선택된 송장 다운로드 로직 */}}
+              >
+                선택다운로드
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -203,6 +257,9 @@ const Waybills = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>
+                  <Checkbox checked={isAllSelected} onCheckedChange={handleSelectAll} />
+                </TableHead>
                 <TableHead className="w-[180px] cursor-pointer" onClick={() => handleSort('waybillNumber')}>
                   <div className="flex items-center gap-1">
                     송장번호
@@ -245,6 +302,9 @@ const Waybills = () => {
               {filteredWaybills.length > 0 ? (
                 filteredWaybills.map((waybill) => (
                   <TableRow key={waybill.id}>
+                    <TableCell>
+                      <Checkbox checked={selectedRows.includes(waybill.id)} onCheckedChange={() => handleSelectRow(waybill.id)} />
+                    </TableCell>
                     <TableCell className="font-medium">{waybill.waybillNumber}</TableCell>
                     <TableCell>{waybill.logisticsPartner}</TableCell>
                     <TableCell>

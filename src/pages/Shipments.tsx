@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
@@ -26,6 +25,9 @@ import { ShipmentRequest } from '@/types/shipment';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import FileDropzone from '@/components/upload/FileDropzone';
+import { useNavigate } from 'react-router-dom';
+import SingleShipmentForm from './SingleShipmentForm';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const Shipments = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +37,11 @@ const Shipments = () => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedShipment, setSelectedShipment] = useState<ShipmentRequest | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [singleFormOpen, setSingleFormOpen] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const navigate = useNavigate();
 
   const filteredShipments = mockShipments.filter(shipment => {
     const matchesSearch =
@@ -44,8 +51,24 @@ const Shipments = () => {
     
     const matchesStatus = statusFilter === 'all' || shipment.status === statusFilter;
     
-    return matchesSearch && matchesStatus;
+    const shipmentDate = new Date(shipment.requestDate);
+    const matchesStart = !startDate || shipmentDate >= new Date(startDate);
+    const matchesEnd = !endDate || shipmentDate <= new Date(endDate);
+    
+    return matchesSearch && matchesStatus && matchesStart && matchesEnd;
   });
+
+  const isAllSelected = filteredShipments.length > 0 && selectedRows.length === filteredShipments.length;
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedRows([]);
+    } else {
+      setSelectedRows(filteredShipments.map(s => s.id));
+    }
+  };
+  const handleSelectRow = (id: string) => {
+    setSelectedRows(prev => prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]);
+  };
 
   const handleViewDetails = (shipment: ShipmentRequest) => {
     setSelectedShipment(shipment);
@@ -82,9 +105,9 @@ const Shipments = () => {
               <Upload className="h-4 w-4" />
               엑셀업로드
             </Button>
-            <Button onClick={() => setCreateDialogOpen(true)} className="flex items-center gap-1">
+            <Button onClick={() => setSingleFormOpen(true)} className="flex items-center gap-1">
               <Package className="h-4 w-4" />
-              새 배송요청
+              단건등록
             </Button>
           </div>
         </div>
@@ -108,12 +131,30 @@ const Shipments = () => {
               <SelectItem value="cancelled">취소됨</SelectItem>
             </SelectContent>
           </Select>
+          <Input
+            type="date"
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
+            className="sm:w-[160px]"
+            placeholder="시작일"
+          />
+          <Input
+            type="date"
+            value={endDate}
+            onChange={e => setEndDate(e.target.value)}
+            className="sm:w-[160px]"
+            placeholder="종료일"
+          />
         </div>
 
         <div className="rounded-md border overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>
+                  <Checkbox checked={isAllSelected} onCheckedChange={handleSelectAll} />
+                </TableHead>
+                <TableHead>No.</TableHead>
                 <TableHead>주문번호</TableHead>
                 <TableHead>요청일자</TableHead>
                 <TableHead>수취인</TableHead>
@@ -126,32 +167,71 @@ const Shipments = () => {
             </TableHeader>
             <TableBody>
               {filteredShipments.length > 0 ? (
-                filteredShipments.map((shipment) => (
+                filteredShipments.map((shipment, idx) => (
                   <TableRow key={shipment.id}>
+                    <TableCell>
+                      <Checkbox checked={selectedRows.includes(shipment.id)} onCheckedChange={() => handleSelectRow(shipment.id)} />
+                    </TableCell>
+                    <TableCell>{idx + 1}</TableCell>
                     <TableCell className="font-medium">{shipment.id}</TableCell>
                     <TableCell>{format(new Date(shipment.requestDate), 'yyyy-MM-dd')}</TableCell>
-                    <TableCell>{shipment.recipientName}</TableCell>
-                    <TableCell>{shipment.country}</TableCell>
-                    <TableCell>{shipment.totalWeight} kg</TableCell>
                     <TableCell>
-                      <ShipmentStatusBadge status={shipment.status} />
+                      <div>{shipment.recipientName}</div>
+                      <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                        {/* 수취인 주소 등 추가 정보가 있다면 여기에 */}
+                      </div>
+                    </TableCell>
+                    <TableCell>{shipment.country}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">{shipment.totalWeight} kg</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className={`text-xs px-2 py-1 rounded-full inline-block ${(() => {
+                        switch (shipment.status) {
+                          case 'pending':
+                            return 'bg-amber-100 text-amber-800';
+                          case 'cancelled':
+                            return 'bg-red-100 text-red-800';
+                          case 'processed':
+                            return 'bg-blue-100 text-blue-800';
+                          case 'completed':
+                            return 'bg-green-100 text-green-800';
+                          default:
+                            return 'bg-gray-100 text-gray-800';
+                        }
+                      })()}`}>{(() => {
+                        switch (shipment.status) {
+                          case 'pending':
+                            return '요청접수';
+                          case 'cancelled':
+                            return '취소';
+                          case 'processed':
+                            return '배송준비중';
+                          case 'completed':
+                            return '배송완료';
+                          default:
+                            return shipment.status;
+                        }
+                      })()}</div>
                     </TableCell>
                     <TableCell>{shipment.logisticsPartner}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewDetails(shipment)}
-                      >
-                        <FileText className="h-4 w-4 mr-1" />
-                        상세보기
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewDetails(shipment)}
+                        >
+                          <FileText className="h-4 w-4 mr-1" />
+                          상세보기
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     검색 결과가 없습니다.
                   </TableCell>
                 </TableRow>
@@ -277,6 +357,19 @@ const Shipments = () => {
           >
             업로드
           </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single Shipment Modal */}
+      <Dialog open={singleFormOpen} onOpenChange={setSingleFormOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>단건등록</DialogTitle>
+            <DialogDescription>개별 배송을 등록하세요.</DialogDescription>
+          </DialogHeader>
+          <div className="pt-2">
+            <SingleShipmentForm />
+          </div>
         </DialogContent>
       </Dialog>
     </Layout>
